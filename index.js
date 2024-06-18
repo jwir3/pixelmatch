@@ -30,6 +30,7 @@ function pixelmatch(img1, img2, output, width, height, options) {
     const b32 = new Uint32Array(img2.buffer, img2.byteOffset, len);
     let identical = true;
 
+    // XXX_jwir3: Could this be simplified with a hashing function or is that more expensive than this?
     for (let i = 0; i < len; i++) {
         if (a32[i] !== b32[i]) { identical = false; break; }
     }
@@ -82,6 +83,7 @@ function pixelmatch(img1, img2, output, width, height, options) {
     return diff;
 }
 
+// XXX_jwir3: Feels like this could be improved.
 function isPixelData(arr) {
     // work around instanceof Uint8Array not working properly in some Jest environments
     return ArrayBuffer.isView(arr) && arr.constructor.BYTES_PER_ELEMENT === 1;
@@ -89,7 +91,7 @@ function isPixelData(arr) {
 
 // check if a pixel is likely a part of anti-aliasing;
 // based on "Anti-aliased Pixel and Intensity Slope Detector" paper by V. Vysniauskas, 2009
-
+// XXX_jwir3: Could we add a function similar to this that detects if a pixel is part of a page shift?
 function antialiased(img, x1, y1, width, height, img2) {
     const x0 = Math.max(x1 - 1, 0);
     const y0 = Math.max(y1 - 1, 0);
@@ -182,6 +184,12 @@ function colorDelta(img1, img2, k, m, yOnly) {
 
     if (a1 === a2 && r1 === r2 && g1 === g2 && b1 === b2) return 0;
 
+    // XXX_jwir3: This is using linear alpha. It's blending with a white background to achieve an
+    //            alpha-like effect. For color difference metrics, this is probably ok, because
+    //            semi-transparent values will always end up being the same difference away (since
+    //            they will both be blended using white). It would be interesting to determine if
+    //            there's a more "correct" way of doing this, though - perhaps blending _after_ the
+    //            transfer to YIQ, or using premultiplied alpha?
     if (a1 < 255) {
         a1 /= 255;
         r1 = blend(r1, a1);
@@ -205,12 +213,18 @@ function colorDelta(img1, img2, k, m, yOnly) {
     const i = rgb2i(r1, g1, b1) - rgb2i(r2, g2, b2);
     const q = rgb2q(r1, g1, b1) - rgb2q(r2, g2, b2);
 
+    // XXX_jwir3: This is eq. 35 in the aforementioned paper, with the sqrt removed.
+    //            We should place the sqrt back into the code to see if it makes a
+    //            change in the difference calculations.
     const delta = 0.5053 * y * y + 0.299 * i * i + 0.1957 * q * q;
 
     // encode whether the pixel lightens or darkens in the sign
+    // XXX_jwir3: Why is this necessary?
     return y1 > y2 ? -delta : delta;
 }
 
+// XXX_jwir3: Performance could be improved using a matrix multiplication, possibly, although this
+//            isn't a major concern unless we're working on a pipelined system like graphics hardware.
 function rgb2y(r, g, b) { return r * 0.29889531 + g * 0.58662247 + b * 0.11448223; }
 function rgb2i(r, g, b) { return r * 0.59597799 - g * 0.27417610 - b * 0.32180189; }
 function rgb2q(r, g, b) { return r * 0.21147017 - g * 0.52261711 + b * 0.31114694; }
